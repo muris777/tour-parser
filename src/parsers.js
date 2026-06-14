@@ -11,6 +11,10 @@ Extract booking information and return ONLY a JSON object, no other text.
 Language normalisation (always output English):
 Español/Spagnolo → Spanish, Français/Francese → French, Deutsch/Tedesco → German, Italiano → Italian, Inglese → English
 
+For Viator emails specifically:
+- time: extract from "Tour Grade" field (e.g. "German Tour 10:00" → time is "10:00") OR from "Tour Grade Code" (e.g. "TG4~10:00" → time is "10:00")
+- language: extract from "Tour Grade Description" (e.g. "German Tour" → "German") OR "Tour Language" (e.g. "German - Guide" → "German")
+
 Return this exact JSON:
 {"provider":"freetour|viator|civitatis|guruwalk|unknown","action":"confirmed|cancelled|rejected|amended|unknown","booking_number":null,"name":null,"email":null,"phone_number":null,"people":null,"date":"YYYY-MM-DD","time":"HH:MM","language":null,"tour_internal_code":null,"tour_title":null}
 
