@@ -50,7 +50,7 @@ function stripNoise(text) {
   }, []);
 
   // Limit to 1500 chars — enough for all booking fields, saves ~50% tokens
-  return collapsed.join('\n').slice(0, 1500);
+  return collapsed.join('\n').slice(0, 2500);
 }
 
 export async function parseEmail(subject, text, fromEmail) {
