@@ -13,7 +13,7 @@ Rules:
 - action: "confirmed", "cancelled", or "rejected"
 - date: YYYY-MM-DD format always
 - time: HH:MM 24-hour format always (convert from 12h if needed, e.g. "11:00 AM" → "11:00", "6:00 PM" → "18:00")
-- language: always in English word (convert "Español" → "Spanish", "Français" → "French", "Deutsch" → "German", "Italiano" → "Italian")
+- language: always in English word (convert "Español" → "Spanish", "Français" → "French", "Deutsch" → "German", "Italiano" → "Italian", "Inglese" → "English", "Tedesco" → "German", "Francese" → "French", "Spagnolo" → "Spanish", "Italiano" → "Italian")
 - people: integer number of people
 - If a field is not found, use null
 - If the email is not a booking confirmation, cancellation, or rejection, set action to "unknown"
