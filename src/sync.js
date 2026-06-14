@@ -67,6 +67,27 @@ export async function syncBooking(booking) {
     return { skipped: true, reason: 'missing booking_number or date' };
   }
 
+  // Handle amendments — update the date on the existing booking
+  if (booking.action === 'amended') {
+    const { data: existing } = await supabase
+      .from('bookings')
+      .select('id')
+      .eq('booking_number', booking.booking_number)
+      .eq('provider', booking.provider)
+      .limit(1);
+
+    if (!existing?.length) {
+      return { skipped: true, reason: 'amendment for unknown booking' };
+    }
+
+    await supabase
+      .from('bookings')
+      .update({ date: booking.date })
+      .eq('id', existing[0].id);
+
+    return { action: 'amended', booking_number: booking.booking_number };
+  }
+
   if (booking.action === 'cancelled' || booking.action === 'rejected') {
     const { data: existing } = await supabase
       .from('bookings')

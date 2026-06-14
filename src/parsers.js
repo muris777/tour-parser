@@ -12,13 +12,15 @@ Language normalisation (always output English):
 Español/Spagnolo → Spanish, Français/Francese → French, Deutsch/Tedesco → German, Italiano → Italian, Inglese → English
 
 Return this exact JSON:
-{"provider":"freetour|viator|civitatis|guruwalk|unknown","action":"confirmed|cancelled|rejected|unknown","booking_number":null,"name":null,"email":null,"phone_number":null,"people":null,"date":"YYYY-MM-DD","time":"HH:MM","language":null,"tour_internal_code":null,"tour_title":null}
+{"provider":"freetour|viator|civitatis|guruwalk|unknown","action":"confirmed|cancelled|rejected|amended|unknown","booking_number":null,"name":null,"email":null,"phone_number":null,"people":null,"date":"YYYY-MM-DD","time":"HH:MM","language":null,"tour_internal_code":null,"tour_title":null}
 
 Rules:
 - date: YYYY-MM-DD always
 - time: HH:MM 24h always (11:00 AM → 11:00, 6:00 PM → 18:00)
 - people: integer only
+- action: "amended" if the email says "Booking Amended" or "amended" or "amendment"
 - action unknown = not a booking email
+- if the email is from meine-landausfluege.de or mentions "Meine Landausflüge" or "TripUp", set provider to "meine-landausfluege" and action to "manual_required" — these emails have no tour details in the body
 - null for missing fields`;
 
 // Lines containing these strings are pure noise — strip them
@@ -50,7 +52,7 @@ function stripNoise(text) {
   }, []);
 
   // Limit to 1500 chars — enough for all booking fields, saves ~50% tokens
-  return collapsed.join('\n').slice(0, 2500);
+  return collapsed.join('\n').slice(0, 1500);
 }
 
 export async function parseEmail(subject, text, fromEmail) {
@@ -89,7 +91,8 @@ export async function parseEmail(subject, text, fromEmail) {
     const clean = rawText.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(clean);
 
-    if (parsed.action === 'unknown') return null;
+    if (parsed.action === "unknown") return null;
+    if (parsed.action === "manual_required") return { ...parsed, manual_required: true };
     return parsed;
 
   } catch (err) {

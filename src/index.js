@@ -11,11 +11,17 @@ async function processEmail(email) {
   try {
     const parsed = await parseEmail(email.subject, email.text, email.fromEmail);
     if (!parsed) return;
+    if (parsed.manual_required) {
+      console.warn(`📋 MANUAL REQUIRED [${parsed.provider}] #${parsed.booking_number} — check provider portal`);
+      return;
+    }
 
     const result = await syncBooking(parsed);
 
     if (result.action === 'created') {
       console.log(`✅ ADDED   [${parsed.provider}] #${parsed.booking_number} — ${parsed.date} ${parsed.time} ${parsed.language}`);
+    } else if (result.action === 'amended') {
+      console.log(`✏️  AMENDED  [${parsed.provider}] #${parsed.booking_number} — new date: ${parsed.date}`);
     } else if (result.action === 'cancelled' || result.action === 'rejected') {
       console.log(`🚫 ${result.action.toUpperCase()} [${parsed.provider}] #${parsed.booking_number}`);
     } else if (result.skipped && result.reason === 'no matching template') {
