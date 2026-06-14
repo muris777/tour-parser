@@ -7,31 +7,33 @@ const supabase = createClient(
 
 /**
  * Find the best matching tour_template for a parsed booking.
- * Matches on internal_code first, then falls back to time + language fuzzy match.
+ * Matches on internal_code first, then time + language, then time only.
  */
 async function findTemplate(booking) {
-  // Best: direct internal code match (Civitatis provides this)
+  // Best: direct internal code match
   if (booking.tour_internal_code) {
     const { data } = await supabase
       .from('tour_templates')
       .select('*')
-      .ilike('title', `%${booking.tour_internal_code}%`)
+      .ilike('internal_code', `%${booking.tour_internal_code}%`)
+      .eq('time', booking.time)
+      .ilike('language', booking.language || '')
       .limit(1);
     if (data?.length) return data[0];
   }
 
-  // Fallback: match on time + language
+  // Fallback: time + language
   if (booking.time && booking.language) {
     const { data } = await supabase
       .from('tour_templates')
       .select('*')
       .eq('time', booking.time)
-      .ilike('language', `%${booking.language}%`)
+      .ilike('language', booking.language)
       .limit(1);
     if (data?.length) return data[0];
   }
 
-  // Fallback: match on time only
+  // Fallback: time only
   if (booking.time) {
     const { data } = await supabase
       .from('tour_templates')
@@ -73,7 +75,6 @@ async function findOrCreateTour(templateId, date) {
 export async function syncBooking(booking) {
   if (!booking) return { skipped: true, reason: 'null booking' };
 
-  // Validate we have enough data
   if (!booking.booking_number || !booking.date) {
     return { skipped: true, reason: 'missing booking_number or date' };
   }
@@ -88,28 +89,36 @@ export async function syncBooking(booking) {
       .limit(1);
 
     if (!existing?.length) {
-      return { skipped: true, reason: 'cancellation for unknown booking_number' };
+      return { skipped: true, reason: 'cancellation for unknown booking' };
     }
 
-    const { error } = await supabase
+    await supabase
       .from('bookings')
       .update({ status: booking.action })
       .eq('id', existing[0].id);
 
-    if (error) throw new Error(`Failed to update booking status: ${error.message}`);
     return { action: booking.action, booking_number: booking.booking_number };
   }
 
-  // Confirmed booking — find or create the tour
+  // Find matching template
   const template = await findTemplate(booking);
   if (!template) {
-    console.warn(`[sync] No template found for booking ${booking.booking_number} — skipping`);
-    return { skipped: true, reason: 'no matching template', booking_number: booking.booking_number };
+    console.warn(
+      `[sync] No template found for booking ${booking.booking_number} — ` +
+      `time: ${booking.time}, lang: ${booking.language}, code: ${booking.tour_internal_code}`
+    );
+    return {
+      skipped: true,
+      reason: 'no matching template',
+      booking_number: booking.booking_number,
+      time: booking.time,
+      language: booking.language,
+    };
   }
 
   const tour = await findOrCreateTour(template.id, booking.date);
 
-  // Check if booking already exists (idempotent)
+  // Check for duplicate
   const { data: existing } = await supabase
     .from('bookings')
     .select('id, status')
@@ -118,7 +127,6 @@ export async function syncBooking(booking) {
     .limit(1);
 
   if (existing?.length) {
-    // Already in DB — only update if status changed
     if (existing[0].status !== 'confirmed') {
       await supabase
         .from('bookings')
@@ -136,7 +144,7 @@ export async function syncBooking(booking) {
     name: booking.name,
     email: booking.email,
     phone_number: booking.phone_number,
-    people: booking.number_of_people,
+    people: booking.people,
     date: booking.date,
     status: 'confirmed',
   });
