@@ -23,21 +23,23 @@ async function runOnce() {
 
   console.log(`[poll] Found ${emails.length} new email(s)`);
 
+  // Process one at a time to avoid rate limits and ensure proper awaiting
   for (const email of emails) {
-    const parsed = parseEmail(email.subject, email.text, email.fromEmail);
-
-    if (!parsed) {
-      console.log(`[parse] Unrecognised email from ${email.fromEmail}: "${email.subject}"`);
-      continue;
-    }
-
-    console.log(`[parse] ${parsed.provider} / ${parsed.action} / booking ${parsed.booking_number}`);
-
     try {
+      const parsed = await parseEmail(email.subject, email.text, email.fromEmail);
+
+      if (!parsed) {
+        console.log(`[parse] Unrecognised email from ${email.fromEmail}: "${email.subject}"`);
+        continue;
+      }
+
+      console.log(`[parse] ${parsed.provider} / ${parsed.action} / booking ${parsed.booking_number}`);
+
       const result = await syncBooking(parsed);
-      console.log('[sync]', result);
+      console.log('[sync]', JSON.stringify(result));
+
     } catch (err) {
-      console.error(`[sync] Error for booking ${parsed.booking_number}:`, err.message);
+      console.error(`[error] Failed to process "${email.subject}":`, err.message);
     }
   }
 }
@@ -46,7 +48,6 @@ async function main() {
   console.log('Tour booking parser started.');
   console.log(`Polling every ${POLL_INTERVAL / 1000}s`);
 
-  // Run immediately on start, then on interval
   await runOnce();
   setInterval(runOnce, POLL_INTERVAL);
 }
