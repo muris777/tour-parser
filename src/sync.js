@@ -6,7 +6,6 @@ const supabase = createClient(
 );
 
 async function findTemplate(booking) {
-  console.log(`[template] Looking for time=${booking.time} lang=${booking.language} code=${booking.tour_internal_code}`);
 
   // 1. time + language + internal_code
   if (booking.time && booking.language && booking.tour_internal_code) {
@@ -16,7 +15,6 @@ async function findTemplate(booking) {
       .eq('time', booking.time)
       .eq('language', booking.language)
       .eq('internal_code', booking.tour_internal_code);
-    console.log(`[template] Match 1 result:`, data, error);
     if (data?.length) return data[0];
   }
 
@@ -27,7 +25,6 @@ async function findTemplate(booking) {
       .select('*')
       .eq('time', booking.time)
       .eq('language', booking.language);
-    console.log(`[template] Match 2 result:`, data, error);
     if (data?.length) return data[0];
   }
 
@@ -37,7 +34,6 @@ async function findTemplate(booking) {
       .from('tour_templates')
       .select('*')
       .eq('time', booking.time);
-    console.log(`[template] Match 3 result:`, data, error);
     if (data?.length) return data[0];
   }
 
