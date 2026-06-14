@@ -4,12 +4,13 @@ import { parseEmail } from './parsers.js';
 import { syncBooking } from './sync.js';
 
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL_MS || '180000');
-const BATCH_SIZE = 5; // process 5 emails in parallel
+const BATCH_SIZE = 5;
+let isRunning = false;
 
 async function processEmail(email) {
   try {
     const parsed = await parseEmail(email.subject, email.text, email.fromEmail);
-    if (!parsed) return; // not a booking email, silently skip
+    if (!parsed) return;
 
     const result = await syncBooking(parsed);
 
@@ -20,31 +21,47 @@ async function processEmail(email) {
     } else if (result.skipped && result.reason === 'no matching template') {
       console.warn(`⚠️  NO TEMPLATE [${parsed.provider}] #${parsed.booking_number} — time:${result.time} lang:${result.language}`);
     }
-    // silently skip already_exists and other non-actionable results
-
   } catch (err) {
     console.error(`❌ ERROR processing "${email.subject}": ${err.message}`);
   }
 }
 
 async function runOnce() {
+  if (isRunning) {
+    console.log('⏳ Previous run still in progress, skipping this poll.');
+    return;
+  }
+
+  isRunning = true;
+
   let emails;
   try {
     emails = await fetchUnseenEmails();
   } catch (err) {
     console.error(`❌ IMAP ERROR: ${err.message}`);
+    isRunning = false;
     return;
   }
 
-  if (!emails.length) return;
+  if (!emails.length) {
+    isRunning = false;
+    return;
+  }
 
   console.log(`📬 ${emails.length} new email(s) — processing...`);
 
-  // Process in batches of BATCH_SIZE in parallel
   for (let i = 0; i < emails.length; i += BATCH_SIZE) {
     const batch = emails.slice(i, i + BATCH_SIZE);
     await Promise.all(batch.map(processEmail));
+
+    // Progress update every 100 emails
+    if ((i + BATCH_SIZE) % 100 === 0) {
+      console.log(`⏱  Processed ${Math.min(i + BATCH_SIZE, emails.length)} / ${emails.length}`);
+    }
   }
+
+  console.log(`✅ Done processing ${emails.length} emails.`);
+  isRunning = false;
 }
 
 async function main() {
