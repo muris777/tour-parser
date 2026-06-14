@@ -7,22 +7,22 @@ const supabase = createClient(
 
 /**
  * Find the best matching tour_template for a parsed booking.
- * Matches on internal_code first, then time + language, then time only.
+ * Priority: internal_code + time + language → time + language → time only
  */
 async function findTemplate(booking) {
-  // Best: direct internal code match
-  if (booking.tour_internal_code) {
+  // 1. Best match: internal_code + time + language
+  if (booking.tour_internal_code && booking.time && booking.language) {
     const { data } = await supabase
       .from('tour_templates')
       .select('*')
-      .ilike('internal_code', `%${booking.tour_internal_code}%`)
+      .ilike('internal_code', booking.tour_internal_code)
       .eq('time', booking.time)
-      .ilike('language', booking.language || '')
+      .ilike('language', booking.language)
       .limit(1);
     if (data?.length) return data[0];
   }
 
-  // Fallback: time + language
+  // 2. time + language
   if (booking.time && booking.language) {
     const { data } = await supabase
       .from('tour_templates')
@@ -33,7 +33,7 @@ async function findTemplate(booking) {
     if (data?.length) return data[0];
   }
 
-  // Fallback: time only
+  // 3. time only
   if (booking.time) {
     const { data } = await supabase
       .from('tour_templates')
