@@ -1,71 +1,110 @@
 /**
  * AI-powered email parser using Claude Haiku.
- * Strips noise from emails before sending to minimize token usage.
+ * Pre-filters by sender domain before calling Claude to save tokens.
  */
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
-const SYSTEM_PROMPT = `You are a booking email parser for a tour company in Riga, Latvia.
-Extract booking information and return ONLY a JSON object, no other text.
+// Only call Claude for emails from these domains
+const KNOWN_PROVIDERS = {
+  'freetour.com':              'freetour',
+  'viator.com':                'viator',
+  'civitatis.com':             'civitatis',
+  'guruwalk.com':              'guruwalk',
+  'meine-landausfluege.de':   'meine-landausfluege',
+  'tripup.com':                'meine-landausfluege',
+};
 
-Language normalisation (always output English):
-Español/Spagnolo → Spanish, Français/Francese → French, Deutsch/Tedesco → German, Italiano → Italian, Inglese → English
+// Compact system prompt — shorter = fewer input tokens per call
+const SYSTEM_PROMPT = `Parse booking emails for a Riga tour company. Return ONLY JSON, no text.
 
-For Viator emails specifically:
-- time: extract from "Tour Grade" field (e.g. "German Tour 10:00" → time is "10:00") OR from "Tour Grade Code" (e.g. "TG4~10:00" → time is "10:00")
-- language: extract from "Tour Grade Description" (e.g. "German Tour" → "German") OR "Tour Language" (e.g. "German - Guide" → "German")
+Language: always English (Español→Spanish, Français→French, Deutsch→German, Italiano→Italian, Inglese→English)
+Viator: get time from "Tour Grade" (e.g. "English Tour 10:30"→10:30) or "Tour Grade Code" (e.g. "TG1~10:30"→10:30); language from "Tour Grade Description" or "Tour Language"
+Date: YYYY-MM-DD, assume 2026 if no year
+Time: HH:MM 24h
+Action: confirmed|cancelled|rejected|amended|manual_required|unknown
+Provider: freetour|viator|civitatis|guruwalk|meine-landausfluege|unknown
+meine-landausfluege/TripUp emails → action=manual_required
 
-Return this exact JSON:
-{"provider":"freetour|viator|civitatis|guruwalk|unknown","action":"confirmed|cancelled|rejected|amended|unknown","booking_number":null,"name":null,"email":null,"phone_number":null,"people":null,"date":"YYYY-MM-DD","time":"HH:MM","language":null,"tour_internal_code":null,"tour_title":null}
+JSON: {"p":"provider","a":"action","bn":"booking_number","n":"name","e":"email","ph":"phone","ppl":0,"d":"date","t":"time","l":"language","ic":"internal_code"}`;
 
-Rules:
-- date: YYYY-MM-DD always
-- time: HH:MM 24h always (11:00 AM → 11:00, 6:00 PM → 18:00)
-- people: integer only
-- action: "amended" if the email says "Booking Amended" or "amended" or "amendment"
-- action unknown = not a booking email
-- if the email is from meine-landausfluege.de or mentions "Meine Landausflüge" or "TripUp", set provider to "meine-landausfluege" and action to "manual_required" — these emails have no tour details in the body
-- null for missing fields`;
-
-// Lines containing these strings are pure noise — strip them
-const NOISE_PATTERNS = [
-  /unsubscribe/i,
-  /privacy policy/i,
-  /terms of service/i,
-  /all rights reserved/i,
-  /do not reply/i,
-  /no.reply/i,
-  /automated message/i,
-  /instagram|facebook|twitter|linkedin|youtube|tiktok|pinterest/i,
-  /baarerstrasse/i,
-  /needham, ma/i,
-  /guillem de castro/i,
-  /©/,
-  /^\s*$/, // blank lines (handled separately)
+// Extract only booking-relevant lines from email body
+const KEEP_PATTERNS = [
+  /booking|reservation|reserva/i,
+  /tour|activity|actividad/i,
+  /date|travel|salida|fecha/i,
+  /time|hour|hora/i,
+  /language|idioma|langue|sprache/i,
+  /traveler|adult|people|adulto|walker|attendee/i,
+  /name|nombre|nom/i,
+  /email/i,
+  /phone|tel/i,
+  /grade|code/i,
+  /internal/i,
+  /cancel|reject|amend/i,
+  /reference|ref|número/i,
+  /confirmed|confirmation/i,
+  /customer|client/i,
 ];
 
-function stripNoise(text) {
-  const lines = text.split('\n');
-  const cleaned = lines.filter(line => !NOISE_PATTERNS.some(p => p.test(line)));
+const NOISE_PATTERNS = [
+  /unsubscribe|privacy|rights reserved|do not reply|automated/i,
+  /instagram|facebook|twitter|linkedin|youtube|tiktok/i,
+  /baarerstrasse|needham|guillem de castro/i,
+  /help center|management center/i,
+  /send the customer|acknowledge this|download the/i,
+  /©|copyright/i,
+];
 
-  // Collapse multiple blank lines into one
-  const collapsed = cleaned.reduce((acc, line) => {
-    if (line.trim() === '' && acc[acc.length - 1]?.trim() === '') return acc;
-    acc.push(line);
-    return acc;
-  }, []);
+function extractRelevantLines(text) {
+  return text.split('\n')
+    .filter(line => {
+      const t = line.trim();
+      if (!t || t.length > 120) return false;
+      if (NOISE_PATTERNS.some(p => p.test(t))) return false;
+      if (KEEP_PATTERNS.some(p => p.test(t))) return true;
+      if (t.length < 50) return true; // short lines are often values
+      return false;
+    })
+    .join('\n')
+    .slice(0, 1500);
+}
 
-  // Limit to 1500 chars — enough for all booking fields, saves ~50% tokens
-  return collapsed.join('\n').slice(0, 1500);
+// Expand compact JSON field names back to full names
+function expandResponse(compact) {
+  return {
+    provider:          compact.p  ?? 'unknown',
+    action:            compact.a  ?? 'unknown',
+    booking_number:    compact.bn ?? null,
+    name:              compact.n  ?? null,
+    email:             compact.e  ?? null,
+    phone_number:      compact.ph ?? null,
+    people:            compact.ppl ?? null,
+    date:              compact.d  ?? null,
+    time:              compact.t  ?? null,
+    language:          compact.l  ?? null,
+    tour_internal_code: compact.ic ?? null,
+  };
 }
 
 export async function parseEmail(subject, text, fromEmail) {
-  if (!ANTHROPIC_API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY environment variable not set');
+  // Pre-filter: only process emails from known booking providers
+  const domain = fromEmail?.split('@')[1]?.toLowerCase();
+  const provider = Object.entries(KNOWN_PROVIDERS).find(([d]) => domain?.includes(d))?.[1];
+
+  if (!provider) return null; // silently skip unknown senders
+
+  // Meine Landausflüge — no need to call Claude, we know what it is
+  if (provider === 'meine-landausfluege') {
+    const bnMatch = subject?.match(/#(\d+)/);
+    console.warn(`📋 MANUAL REQUIRED [meine-landausfluege] #${bnMatch?.[1] ?? '?'} — check provider portal`);
+    return null; // don't add to DB
   }
 
-  const cleaned = stripNoise(text);
-  const emailContent = `From: ${fromEmail}\nSubject: ${subject}\n\n${cleaned}`;
+  if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not set');
+
+  const body = extractRelevantLines(text);
+  const emailContent = `From: ${fromEmail}\nSubject: ${subject}\n\n${body}`;
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -77,15 +116,14 @@ export async function parseEmail(subject, text, fromEmail) {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 300,
+        max_tokens: 150,
         system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: `Parse this email:\n\n${emailContent}` }],
+        messages: [{ role: 'user', content: emailContent }],
       }),
     });
 
     if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`Claude API error: ${response.status} ${err}`);
+      throw new Error(`Claude API error: ${response.status} ${await response.text()}`);
     }
 
     const data = await response.json();
@@ -93,14 +131,14 @@ export async function parseEmail(subject, text, fromEmail) {
     if (!rawText) throw new Error('Empty response from Claude');
 
     const clean = rawText.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
+    const compact = JSON.parse(clean);
+    const parsed = expandResponse(compact);
 
-    if (parsed.action === "unknown") return null;
-    if (parsed.action === "manual_required") return { ...parsed, manual_required: true };
+    if (parsed.action === 'unknown') return null;
     return parsed;
 
   } catch (err) {
-    console.error(`[parse] Claude error for "${subject}":`, err.message);
+    console.error(`❌ Parse error for "${subject}": ${err.message}`);
     return null;
   }
 }
