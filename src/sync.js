@@ -5,50 +5,45 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-/**
- * Find the best matching tour_template for a parsed booking.
- * Priority: internal_code + time + language → time + language → time only
- */
 async function findTemplate(booking) {
-  // 1. Best match: internal_code + time + language
-  if (booking.tour_internal_code && booking.time && booking.language) {
-    const { data } = await supabase
+  console.log(`[template] Looking for time=${booking.time} lang=${booking.language} code=${booking.tour_internal_code}`);
+
+  // 1. time + language + internal_code
+  if (booking.time && booking.language && booking.tour_internal_code) {
+    const { data, error } = await supabase
       .from('tour_templates')
       .select('*')
-      .ilike('internal_code', booking.tour_internal_code)
       .eq('time', booking.time)
-      .ilike('language', booking.language)
-      .limit(1);
+      .eq('language', booking.language)
+      .eq('internal_code', booking.tour_internal_code);
+    console.log(`[template] Match 1 result:`, data, error);
     if (data?.length) return data[0];
   }
 
   // 2. time + language
   if (booking.time && booking.language) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('tour_templates')
       .select('*')
       .eq('time', booking.time)
-      .ilike('language', booking.language)
-      .limit(1);
+      .eq('language', booking.language);
+    console.log(`[template] Match 2 result:`, data, error);
     if (data?.length) return data[0];
   }
 
   // 3. time only
   if (booking.time) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('tour_templates')
       .select('*')
-      .eq('time', booking.time)
-      .limit(1);
+      .eq('time', booking.time);
+    console.log(`[template] Match 3 result:`, data, error);
     if (data?.length) return data[0];
   }
 
   return null;
 }
 
-/**
- * Find or create a Tours row for a given template + date.
- */
 async function findOrCreateTour(templateId, date) {
   const { data: existing } = await supabase
     .from('tours')
@@ -69,9 +64,6 @@ async function findOrCreateTour(templateId, date) {
   return created;
 }
 
-/**
- * Process a parsed booking object and sync it to Supabase.
- */
 export async function syncBooking(booking) {
   if (!booking) return { skipped: true, reason: 'null booking' };
 
@@ -79,7 +71,6 @@ export async function syncBooking(booking) {
     return { skipped: true, reason: 'missing booking_number or date' };
   }
 
-  // Handle cancellations and rejections
   if (booking.action === 'cancelled' || booking.action === 'rejected') {
     const { data: existing } = await supabase
       .from('bookings')
@@ -100,7 +91,6 @@ export async function syncBooking(booking) {
     return { action: booking.action, booking_number: booking.booking_number };
   }
 
-  // Find matching template
   const template = await findTemplate(booking);
   if (!template) {
     console.warn(
@@ -118,7 +108,6 @@ export async function syncBooking(booking) {
 
   const tour = await findOrCreateTour(template.id, booking.date);
 
-  // Check for duplicate
   const { data: existing } = await supabase
     .from('bookings')
     .select('id, status')
@@ -136,7 +125,6 @@ export async function syncBooking(booking) {
     return { action: 'already_exists', booking_number: booking.booking_number };
   }
 
-  // Insert new booking
   const { error } = await supabase.from('bookings').insert({
     tour_id: tour.id,
     booking_number: booking.booking_number,
