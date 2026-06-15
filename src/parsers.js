@@ -15,6 +15,15 @@ const KNOWN_PROVIDERS = {
   'tripup.com':                'meine-landausfluege',
 };
 
+// Civitatis support/help emails — not booking notifications, skip these
+const SKIP_SENDERS = [
+  'ayuda@civitatis.com',
+  'soporte@civitatis.com',
+  'support@civitatis.com',
+  'slara@civitatis.com',
+  'invoicing@civitatis.com',
+];
+
 // Compact system prompt — shorter = fewer input tokens per call
 const SYSTEM_PROMPT = `Parse booking emails for a Riga tour company. Return ONLY JSON, no text.
 
@@ -26,7 +35,8 @@ Action: confirmed|cancelled|rejected|amended|manual_required|unknown
 Provider: freetour|viator|civitatis|guruwalk|meine-landausfluege|unknown
 meine-landausfluege/TripUp emails → action=manual_required
 
-JSON: {"p":"provider","a":"action","bn":"booking_number","n":"name","e":"email","ph":"phone","ppl":0,"d":"date","t":"time","l":"language","ic":"internal_code"}`;
+JSON: {"p":"provider","a":"action","bn":"booking_number","n":"name","e":"email","ph":"phone","ppl":0,"d":"date","t":"time","l":"language","ic":"internal_code"}
+IMPORTANT: use null for any missing/unknown field values, never use the string "unknown"`;
 
 // Extract only booking-relevant lines from email body
 const KEEP_PATTERNS = [
@@ -93,6 +103,9 @@ export async function parseEmail(subject, text, fromEmail) {
   const provider = Object.entries(KNOWN_PROVIDERS).find(([d]) => domain?.includes(d))?.[1];
 
   if (!provider) return null; // silently skip unknown senders
+
+  // Skip known non-booking addresses even from valid domains
+  if (SKIP_SENDERS.includes(fromEmail?.toLowerCase())) return null;
 
   // Meine Landausflüge — no need to call Claude, we know what it is
   if (provider === 'meine-landausfluege') {

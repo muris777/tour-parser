@@ -6,6 +6,12 @@ const supabase = createClient(
 );
 
 async function findTemplate(booking) {
+  // Treat "unknown" string as null — Claude sometimes returns this instead of null
+  if (booking.time === 'unknown') booking.time = null;
+  if (booking.language === 'unknown') booking.language = null;
+  if (booking.tour_internal_code === 'unknown') booking.tour_internal_code = null;
+  if (booking.booking_number === 'unknown') booking.booking_number = null;
+
 
   // 1. time + language + internal_code
   if (booking.time && booking.language && booking.tour_internal_code) {
