@@ -73,11 +73,11 @@ export async function syncBooking(booking) {
     return { skipped: true, reason: 'missing booking_number or date' };
   }
 
-  // Handle amendments — update the date on the existing booking
+  // Handle amendments — update date AND reassign to correct tour
   if (booking.action === 'amended') {
     const { data: existing } = await supabase
       .from('bookings')
-      .select('id')
+      .select('id, tour_id')
       .eq('booking_number', booking.booking_number)
       .eq('provider', booking.provider)
       .limit(1);
@@ -86,12 +86,27 @@ export async function syncBooking(booking) {
       return { skipped: true, reason: 'amendment for unknown booking' };
     }
 
+    // Get the template from the current tour so we can find/create the new tour
+    const { data: currentTour } = await supabase
+      .from('tours')
+      .select('template_id')
+      .eq('id', existing[0].tour_id)
+      .single();
+
+    if (!currentTour) {
+      return { skipped: true, reason: 'amendment — current tour not found' };
+    }
+
+    // Find or create a tour on the new date with the same template
+    const newTour = await findOrCreateTour(currentTour.template_id, booking.date);
+
+    // Update booking with new date and new tour_id
     await supabase
       .from('bookings')
-      .update({ date: booking.date })
+      .update({ date: booking.date, tour_id: newTour.id })
       .eq('id', existing[0].id);
 
-    return { action: 'amended', booking_number: booking.booking_number };
+    return { action: 'amended', booking_number: booking.booking_number, new_tour_id: newTour.id };
   }
 
   if (booking.action === 'cancelled' || booking.action === 'rejected') {
