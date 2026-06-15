@@ -5,15 +5,19 @@
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
-// Only call Claude for emails from these domains
-const KNOWN_PROVIDERS = {
-  'freetour.com':              'freetour',
-  'viator.com':                'viator',
-  'civitatis.com':             'civitatis',
-  'guruwalk.com':              'guruwalk',
-  'meine-landausfluege.de':   'meine-landausfluege',
-  'tripup.com':                'meine-landausfluege',
-};
+// Only call Claude for emails from these known sender addresses/domains
+// Viator uses multiple addresses including dynamic tripadvisor ones
+const PROVIDER_PATTERNS = [
+  { pattern: /freetour\.com$/i,                      provider: 'freetour' },
+  { pattern: /viator\.com$/i,                        provider: 'viator' },
+  { pattern: /tripadvisor\.com$/i,                   provider: 'viator' },
+  { pattern: /expmessaging\.tripadvisor\.com$/i,     provider: 'viator' },
+  { pattern: /t1\.viator\.com$/i,                    provider: 'viator' },
+  { pattern: /civitatis\.com$/i,                     provider: 'civitatis' },
+  { pattern: /guruwalk\.com$/i,                      provider: 'guruwalk' },
+  { pattern: /meine-landausfluege\.de$/i,            provider: 'meine-landausfluege' },
+  { pattern: /tripup\.com$/i,                        provider: 'meine-landausfluege' },
+];
 
 // Civitatis support/help emails — not booking notifications, skip these
 const SKIP_SENDERS = [
@@ -22,6 +26,8 @@ const SKIP_SENDERS = [
   'support@civitatis.com',
   'slara@civitatis.com',
   'invoicing@civitatis.com',
+  'calidad@guruwalk.com',
+  'notificaciones@civitatis.com',
 ];
 
 // Compact system prompt — shorter = fewer input tokens per call
@@ -66,6 +72,22 @@ const NOISE_PATTERNS = [
   /©|copyright/i,
 ];
 
+// Provider system emails that should never be saved as guest email
+const PROVIDER_EMAILS = [
+  /expmessaging\.tripadvisor\.com/i,
+  /tripadvisor\.com/i,
+  /viator\.com/i,
+  /civitatis\.com/i,
+  /guruwalk\.com/i,
+  /freetour\.com/i,
+  /privaterelay\.appleid\.com/i,
+];
+
+function isProviderEmail(email) {
+  if (!email) return true;
+  return PROVIDER_EMAILS.some(p => p.test(email));
+}
+
 function extractRelevantLines(text) {
   return text.split('\n')
     .filter(line => {
@@ -100,7 +122,7 @@ function expandResponse(compact) {
 export async function parseEmail(subject, text, fromEmail) {
   // Pre-filter: only process emails from known booking providers
   const domain = fromEmail?.split('@')[1]?.toLowerCase();
-  const provider = Object.entries(KNOWN_PROVIDERS).find(([d]) => domain?.includes(d))?.[1];
+  const provider = PROVIDER_PATTERNS.find(({ pattern }) => pattern.test(domain || ''))?.provider;
 
   if (!provider) return null; // silently skip unknown senders
 
