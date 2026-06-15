@@ -44,7 +44,6 @@ export function fetchUnseenEmails() {
     });
 
     const emails = [];
-    const fetchedUids = [];
 
     imap.once('ready', () => {
       imap.openBox('INBOX', false, (err) => {
@@ -67,31 +66,15 @@ export function fetchUnseenEmails() {
 
           function fetchNextBatch() {
             if (batchIndex >= batches.length) {
-              // Mark all fetched emails as seen now
-              if (fetchedUids.length) {
-                imap.setFlags(fetchedUids, ['\\Seen'], (err) => {
-                  if (err) console.error('[imap] Failed to mark as seen:', err.message);
-                  imap.end();
-                  resolve(emails);
-                });
-              } else {
-                imap.end();
-                resolve(emails);
-              }
-              return;
+              imap.end();
+              return resolve(emails);
             }
 
             const batch = batches[batchIndex++];
-            // Fetch without marking seen yet
-            const fetch = imap.fetch(batch, { bodies: '', markSeen: false });
+            const fetch = imap.fetch(batch, { bodies: '', markSeen: true });
 
-            fetch.on('message', (msg, seqno) => {
+            fetch.on('message', (msg) => {
               let rawEmail = '';
-              let uid = null;
-
-              msg.on('attributes', (attrs) => {
-                uid = attrs.uid;
-              });
 
               msg.on('body', (stream) => {
                 stream.on('data', (chunk) => rawEmail += chunk.toString());
@@ -110,7 +93,7 @@ export function fetchUnseenEmails() {
                     fromEmail: parsed.from?.value?.[0]?.address || '',
                   });
 
-                  if (uid) fetchedUids.push(uid);
+
                 } catch (e) {
                   console.error('[imap] Failed to parse message:', e.message);
                 }
