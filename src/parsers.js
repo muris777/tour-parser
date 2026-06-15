@@ -40,6 +40,9 @@ Action: confirmed|cancelled|rejected|amended|manual_required|unknown
 Provider: freetour|viator|civitatis|guruwalk|meine-landausfluege|unknown
 meine-landausfluege/TripUp emails → action=manual_required
 
+- For Freetour emails: "Rechazar esta reserva" or "Reject this booking" is a button/link for the operator to optionally reject — it does NOT mean the booking is rejected. Only set action=rejected if the subject or body explicitly says the booking WAS rejected by you or cancelled by the customer.
+
+
 JSON: {"p":"provider","a":"action","bn":"booking_number","n":"name","e":"email","ph":"phone","ppl":0,"d":"date","t":"time","l":"language","ic":"internal_code"}
 IMPORTANT: use null for any missing/unknown field values, never use the string "unknown"`;
 
