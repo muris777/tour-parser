@@ -160,14 +160,15 @@ export async function syncBooking(booking) {
     .limit(1);
 
   if (existing?.length) {
-    if (existing[0].status !== 'confirmed') {
-      await supabase
-        .from('bookings')
-        .update({ status: 'confirmed' })
-        .eq('id', existing[0].id);
-    }
-    return { action: 'already_exists', booking_number: booking.booking_number };
+  // Never overwrite rejected or cancelled status with confirmed
+  if (existing[0].status !== 'confirmed' && existing[0].status !== 'rejected' && existing[0].status !== 'cancelled') {
+    await supabase
+      .from('bookings')
+      .update({ status: 'confirmed' })
+      .eq('id', existing[0].id);
   }
+  return { action: 'already_exists', booking_number: booking.booking_number };
+}
 
   const { error } = await supabase.from('bookings').insert({
     tour_id: tour.id,
