@@ -27,7 +27,6 @@ const SKIP_SENDERS = [
   'slara@civitatis.com',
   'invoicing@civitatis.com',
   'calidad@guruwalk.com',
-  'notificaciones@civitatis.com',
 ];
 
 // Compact system prompt — shorter = fewer input tokens per call
