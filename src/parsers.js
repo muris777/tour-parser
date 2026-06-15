@@ -59,7 +59,7 @@ const KEEP_PATTERNS = [
   /phone|tel/i,
   /grade|code/i,
   /internal/i,
-  /cancel|reject|amend/i,
+  /cancel|reject|amend|canceled|cancellation|booking canceled/i,
   /reference|ref|número/i,
   /confirmed|confirmation/i,
   /customer|client/i,

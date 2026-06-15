@@ -20,6 +20,8 @@ function htmlToText(html) {
     .replace(/&#39;/g, "'")
     .replace(/\r\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
+    .replace(/[\u200B-\u200D\uFEFF\u00AD]/g, '') // remove zero-width spaces
+    .replace(/&#8204;/g, '') // remove zero-width non-joiner HTML entity
     .trim();
 }
 
