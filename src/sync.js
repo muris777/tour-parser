@@ -118,14 +118,18 @@ export async function syncBooking(booking) {
   if (booking.action === 'cancelled' || booking.action === 'rejected') {
     const { data: existing } = await supabase
       .from('bookings')
-      .select('id')
+      .select('id, status')  // add status here
       .eq('booking_number', booking.booking_number)
       .eq('provider', booking.provider)
       .limit(1);
 
-    if (!existing?.length) {
-      return { skipped: true, reason: 'cancellation for unknown booking' };
-    }
+  if (!existing?.length) {
+    return { skipped: true, reason: 'cancellation for unknown booking' };
+  }
+
+  if (existing[0].status === booking.action) {
+    return { action: 'already_exists', booking_number: booking.booking_number };
+  }
 
     await supabase
       .from('bookings')
