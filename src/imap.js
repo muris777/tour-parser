@@ -1,10 +1,28 @@
 import Imap from 'imap';
 import { simpleParser } from 'mailparser';
 
-/**
- * Connects to the IMAP inbox and fetches all UNSEEN messages in batches.
- * Marks fetched messages as SEEN so they aren't re-processed.
- */
+function htmlToText(html) {
+  if (!html) return '';
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/tr>/gi, '\n')
+    .replace(/<\/td>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export function fetchUnseenEmails() {
   return new Promise((resolve, reject) => {
     const imap = new Imap({
@@ -30,7 +48,6 @@ export function fetchUnseenEmails() {
             return resolve([]);
           }
 
-          // Fetch in batches of 10 to avoid "Too long argument" error
           const BATCH_SIZE = 10;
           const batches = [];
           for (let i = 0; i < uids.length; i += BATCH_SIZE) {
@@ -56,9 +73,14 @@ export function fetchUnseenEmails() {
               msg.once('end', async () => {
                 try {
                   const parsed = await simpleParser(rawEmail);
+                  // Prefer plain text, fall back to HTML converted to text
+                  const text = parsed.text
+                    ? parsed.text
+                    : htmlToText(parsed.html || '');
+
                   emails.push({
                     subject: parsed.subject || '',
-                    text: parsed.text || parsed.html || '',
+                    text,
                     fromEmail: parsed.from?.value?.[0]?.address || '',
                   });
                 } catch (e) {
