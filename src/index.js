@@ -9,6 +9,7 @@ let isRunning = false;
 
 async function processEmail(email) {
   try {
+    console.log(`[debug] Processing: "${email.subject}" from ${email.fromEmail} — ${email.text.slice(0, 200)}`)
     const parsed = await parseEmail(email.subject, email.text, email.fromEmail);
     if (!parsed) return;
     if (parsed.manual_required) {
