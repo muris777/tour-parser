@@ -4,21 +4,18 @@ import { simpleParser } from 'mailparser';
 function htmlToText(html) {
   if (!html) return '';
   return html
-    // Remove preheader tracking spam first (Viator uses &zwnj;&nbsp; extensively)
     .replace(/(&zwnj;|&nbsp;|\u200C|\u00A0){3,}/g, ' ')
     .replace(/[\u200B-\u200D\uFEFF]/g, '')
-    // Remove style and script blocks
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    // Convert block elements to newlines
+    .replace(/<a[^>]*href\s*=\s*["'][^"']*["'][^>]*>/gi, '') // remove link tags but keep text
+    .replace(/<img[^>]*>/gi, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n')
     .replace(/<\/div>/gi, '\n')
     .replace(/<\/tr>/gi, '\n')
     .replace(/<\/td>/gi, ' ')
-    // Strip remaining tags
     .replace(/<[^>]+>/g, '')
-    // Decode HTML entities
     .replace(/&nbsp;/g, ' ')
     .replace(/&zwnj;/g, '')
     .replace(/&amp;/g, '&')
@@ -27,7 +24,7 @@ function htmlToText(html) {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&copy;/g, '©')
-    // Clean up whitespace
+    .replace(/https?:\/\/\S+/g, '') // remove URLs
     .replace(/[ \t]+/g, ' ')
     .replace(/\r\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
@@ -47,6 +44,7 @@ export function fetchUnseenEmails() {
     });
 
     const emails = [];
+    const fetchedUids = [];
 
     imap.once('ready', () => {
       imap.openBox('INBOX', false, (err) => {
@@ -69,22 +67,39 @@ export function fetchUnseenEmails() {
 
           function fetchNextBatch() {
             if (batchIndex >= batches.length) {
-              imap.end();
-              return resolve(emails);
+              // Mark all fetched emails as seen now
+              if (fetchedUids.length) {
+                imap.setFlags(fetchedUids, ['\\Seen'], (err) => {
+                  if (err) console.error('[imap] Failed to mark as seen:', err.message);
+                  imap.end();
+                  resolve(emails);
+                });
+              } else {
+                imap.end();
+                resolve(emails);
+              }
+              return;
             }
 
             const batch = batches[batchIndex++];
-            const fetch = imap.fetch(batch, { bodies: '', markSeen: true });
+            // Fetch without marking seen yet
+            const fetch = imap.fetch(batch, { bodies: '', markSeen: false });
 
-            fetch.on('message', (msg) => {
+            fetch.on('message', (msg, seqno) => {
               let rawEmail = '';
+              let uid = null;
+
+              msg.on('attributes', (attrs) => {
+                uid = attrs.uid;
+              });
+
               msg.on('body', (stream) => {
                 stream.on('data', (chunk) => rawEmail += chunk.toString());
               });
+
               msg.once('end', async () => {
                 try {
                   const parsed = await simpleParser(rawEmail);
-                  // Prefer plain text, fall back to HTML converted to text
                   const text = parsed.text
                     ? parsed.text
                     : htmlToText(parsed.html || '');
@@ -94,6 +109,8 @@ export function fetchUnseenEmails() {
                     text,
                     fromEmail: parsed.from?.value?.[0]?.address || '',
                   });
+
+                  if (uid) fetchedUids.push(uid);
                 } catch (e) {
                   console.error('[imap] Failed to parse message:', e.message);
                 }
