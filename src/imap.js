@@ -4,24 +4,33 @@ import { simpleParser } from 'mailparser';
 function htmlToText(html) {
   if (!html) return '';
   return html
+    // Remove preheader tracking spam first (Viator uses &zwnj;&nbsp; extensively)
+    .replace(/(&zwnj;|&nbsp;|\u200C|\u00A0){3,}/g, ' ')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    // Remove style and script blocks
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    // Convert block elements to newlines
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n')
     .replace(/<\/div>/gi, '\n')
     .replace(/<\/tr>/gi, '\n')
     .replace(/<\/td>/gi, ' ')
+    // Strip remaining tags
     .replace(/<[^>]+>/g, '')
+    // Decode HTML entities
     .replace(/&nbsp;/g, ' ')
+    .replace(/&zwnj;/g, '')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+    .replace(/&copy;/g, '©')
+    // Clean up whitespace
+    .replace(/[ \t]+/g, ' ')
     .replace(/\r\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
-    .replace(/[\u200B-\u200D\uFEFF\u00AD]/g, '') // remove zero-width spaces
-    .replace(/&#8204;/g, '') // remove zero-width non-joiner HTML entity
     .trim();
 }
 
