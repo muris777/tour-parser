@@ -69,6 +69,12 @@ async function findOrCreateTour(templateId, date) {
 export async function syncBooking(booking) {
   if (!booking) return { skipped: true, reason: 'null booking' };
 
+  // Civitatis prefixes amended booking numbers with 'A' — strip it and treat as amendment
+  if (booking.provider === 'civitatis' && booking.booking_number?.startsWith('A')) {
+    booking.booking_number = booking.booking_number.slice(1);
+    booking.action = 'amended';
+  }
+
   if (!booking.booking_number || !booking.date) {
     return { skipped: true, reason: 'missing booking_number or date' };
   }
