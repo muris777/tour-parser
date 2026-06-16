@@ -8,7 +8,7 @@ function htmlToText(html) {
     .replace(/[\u200B-\u200D\uFEFF]/g, '')
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<a[^>]*href\s*=\s*["'][^"']*["'][^>]*>/gi, '') // remove link tags but keep text
+    .replace(/<a[^>]*href\s*=\s*["'][^"']*["'][^>]*>/gi, '')
     .replace(/<img[^>]*>/gi, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n')
@@ -24,7 +24,7 @@ function htmlToText(html) {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&copy;/g, '©')
-    .replace(/https?:\/\/\S+/g, '') // remove URLs
+    .replace(/https?:\/\/\S+/g, '')
     .replace(/[ \t]+/g, ' ')
     .replace(/\r\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
@@ -51,7 +51,6 @@ export function fetchUnseenEmails() {
 
         imap.search(['UNSEEN'], (err, uids) => {
           if (err) return reject(err);
-          console.log(`[imap-debug] UNSEEN search returned ${uids?.length || 0} UIDs: ${JSON.stringify(uids)}`);
           if (!uids?.length) {
             imap.end();
             return resolve([]);
@@ -74,7 +73,20 @@ export function fetchUnseenEmails() {
             const batch = batches[batchIndex++];
             const fetch = imap.fetch(batch, { bodies: '', markSeen: true });
 
+            // Track all per-message parsing promises so we wait for them
+            // before moving to the next batch or resolving. This fixes a
+            // race condition where fetch 'end' fires before async message
+            // parsing completes (most visible with single-message batches).
+            const messagePromises = [];
+
             fetch.on('message', (msg) => {
+              let resolveMsg, rejectMsg;
+              const msgPromise = new Promise((res, rej) => {
+                resolveMsg = res;
+                rejectMsg = rej;
+              });
+              messagePromises.push(msgPromise);
+
               let rawEmail = '';
 
               msg.on('body', (stream) => {
@@ -93,16 +105,20 @@ export function fetchUnseenEmails() {
                     text,
                     fromEmail: parsed.from?.value?.[0]?.address || '',
                   });
-
-
+                  resolveMsg();
                 } catch (e) {
                   console.error('[imap] Failed to parse message:', e.message);
+                  resolveMsg(); // resolve anyway so we don't hang the batch
                 }
               });
             });
 
             fetch.once('error', reject);
-            fetch.once('end', fetchNextBatch);
+            fetch.once('end', async () => {
+              // Wait for all in-flight message parses to finish before continuing
+              await Promise.all(messagePromises);
+              fetchNextBatch();
+            });
           }
 
           fetchNextBatch();
