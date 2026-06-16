@@ -40,7 +40,7 @@ Action: confirmed|cancelled|rejected|amended|manual_required|unknown
 Provider: freetour|viator|civitatis|guruwalk|meine-landausfluege|unknown
 meine-landausfluege/TripUp emails → action=manual_required
 
-- For Freetour emails: "Rechazar esta reserva" or "Reject this booking" is a button/link for the operator to optionally reject — it does NOT mean the booking is rejected. Only set action=rejected if the subject or body explicitly says the booking WAS rejected by you or cancelled by the customer.
+- Freetour IMPORTANT: "Rechazar esta reserva", "Reject this booking", and "reject this booking in order to inform the customer" are ACTION BUTTONS/LINKS for the operator — they do NOT mean the booking is rejected. Only set action=rejected if the email explicitly states the booking WAS ALREADY rejected (e.g. "You have successfully rejected the booking"). Both "Reserva Garantizada Confirmada" (Spanish) and "Confirmed Guaranteed Booking" (English) mean action=confirmed.
 - Viator cancellation emails have subject "Booking Canceled" and contain "Booking Reference: #BR-..." with "Canceled" below it — set action=cancelled for these, even if they come from a "noreply" address. 
 
 JSON: {"p":"provider","a":"action","bn":"booking_number","n":"name","e":"email","ph":"phone","ppl":0,"d":"date","t":"time","l":"language","ic":"internal_code"}
