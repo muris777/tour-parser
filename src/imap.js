@@ -51,6 +51,7 @@ export function fetchUnseenEmails() {
 
         imap.search(['UNSEEN'], (err, uids) => {
           if (err) return reject(err);
+          console.log(`[imap-debug] UNSEEN search returned ${uids?.length || 0} UIDs: ${JSON.stringify(uids)}`);
           if (!uids?.length) {
             imap.end();
             return resolve([]);
