@@ -41,6 +41,7 @@ Provider: freetour|viator|civitatis|guruwalk|meine-landausfluege|unknown
 meine-landausfluege/TripUp emails → action=manual_required
 
 - Freetour IMPORTANT: "Rechazar esta reserva", "Reject this booking", and "reject this booking in order to inform the customer" are ACTION BUTTONS/LINKS for the operator — they do NOT mean the booking is rejected. Only set action=rejected if the email explicitly states the booking WAS ALREADY rejected (e.g. "You have successfully rejected the booking"). Both "Reserva Garantizada Confirmada" (Spanish) and "Confirmed Guaranteed Booking" (English) mean action=confirmed.
+- Freetour CANCELLATION: "Your customer: [Name] has cancelled his or her booking (#[number])" or "ha cancelado su reserva" means action=cancelled. This is a genuine customer-initiated cancellation, distinct from a rejection.
 - Viator cancellation emails have subject "Booking Canceled" and contain "Booking Reference: #BR-..." with "Canceled" below it — set action=cancelled for these, even if they come from a "noreply" address. 
 - Total people (ppl field) = sum of ALL traveler categories mentioned (adults + children + infants + seniors, etc.), not just the first category listed. Look for labels like "Adultos", "Niños", "Adults", "Children", "Kids", "Infants" and add them all together.
 
