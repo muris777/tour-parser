@@ -41,6 +41,7 @@ Language: always English (Español→Spanish, Français→French, Deutsch→Germ
 Viator: get time from "Tour Grade" (e.g. "English Tour 10:30"→10:30) or "Tour Grade Code" (e.g. "TG1~10:30"→10:30); language from "Tour Grade Description" or "Tour Language"
 Date: YYYY-MM-DD, assume 2026 if no year
 Time: HH:MM 24h
+Phone: always look for "Phone:", "Teléfono de reserva:", "Booking phone:" labels and extract the FULL number including country code and all digits — never truncate to just a country code prefix like "+1" alone.
 Action: confirmed|cancelled|rejected|amended|manual_required|unknown
 Provider: freetour|viator|civitatis|guruwalk|meine-landausfluege|rigatrips-website|unknown
 meine-landausfluege/TripUp emails → action=manual_required
@@ -102,10 +103,19 @@ function isProviderEmail(email) {
 
 function extractRelevantLines(text) {
   return text.split('\n')
+    .map(line => {
+      // Strip just the noise phrase out of a line rather than dropping the
+      // whole line, in case useful content (like a phone number) shares it
+      // due to HTML-to-text quirks.
+      let t = line;
+      for (const p of NOISE_PATTERNS) {
+        t = t.replace(p, '');
+      }
+      return t;
+    })
     .filter(line => {
       const t = line.trim();
       if (!t || t.length > 120) return false;
-      if (NOISE_PATTERNS.some(p => p.test(t))) return false;
       if (KEEP_PATTERNS.some(p => p.test(t))) return true;
       if (t.length < 50) return true; // short lines are often values
       return false;

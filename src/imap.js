@@ -8,7 +8,7 @@ function htmlToText(html) {
     .replace(/[\u200B-\u200D\uFEFF]/g, '')
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<a[^>]*href\s*=\s*["'][^"']*["'][^>]*>/gi, '')
+    .replace(/<a[^>]*href\s*=\s*["'][^"']*["'][^>]*>/gi, '\n')
     .replace(/<img[^>]*>/gi, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n')
