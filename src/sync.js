@@ -43,6 +43,21 @@ async function findTemplate(booking) {
     if (data?.length) return data[0];
   }
 
+  // 4. No time available (e.g. website bookings that omit it) — fall back to
+  // matching by internal_code (+ language if known), but ONLY if that narrows
+  // it down to exactly one template. If there are multiple time slots for the
+  // same tour/language, we can't safely guess which one, so we skip.
+  if (!booking.time && booking.tour_internal_code) {
+    let query = supabase
+      .from('tour_templates')
+      .select('*')
+      .eq('internal_code', booking.tour_internal_code);
+    if (booking.language) query = query.eq('language', booking.language);
+
+    const { data } = await query;
+    if (data?.length === 1) return data[0];
+  }
+
   return null;
 }
 
@@ -118,18 +133,19 @@ export async function syncBooking(booking) {
   if (booking.action === 'cancelled' || booking.action === 'rejected') {
     const { data: existing } = await supabase
       .from('bookings')
-      .select('id, status')  // add status here
+      .select('id, status')
       .eq('booking_number', booking.booking_number)
       .eq('provider', booking.provider)
       .limit(1);
 
-  if (!existing?.length) {
-    return { skipped: true, reason: 'cancellation for unknown booking' };
-  }
+    if (!existing?.length) {
+      return { skipped: true, reason: 'cancellation for unknown booking' };
+    }
 
-  if (existing[0].status === booking.action) {
-    return { action: 'already_exists', booking_number: booking.booking_number };
-  }
+    // Don't re-process if already in this exact state
+    if (existing[0].status === booking.action) {
+      return { action: 'already_exists', booking_number: booking.booking_number };
+    }
 
     await supabase
       .from('bookings')
@@ -164,15 +180,15 @@ export async function syncBooking(booking) {
     .limit(1);
 
   if (existing?.length) {
-  // Never overwrite rejected or cancelled status with confirmed
-  if (existing[0].status !== 'confirmed' && existing[0].status !== 'rejected' && existing[0].status !== 'cancelled') {
-    await supabase
-      .from('bookings')
-      .update({ status: 'confirmed' })
-      .eq('id', existing[0].id);
+    // Never overwrite rejected or cancelled status with confirmed
+    if (existing[0].status !== 'confirmed' && existing[0].status !== 'rejected' && existing[0].status !== 'cancelled') {
+      await supabase
+        .from('bookings')
+        .update({ status: 'confirmed' })
+        .eq('id', existing[0].id);
+    }
+    return { action: 'already_exists', booking_number: booking.booking_number };
   }
-  return { action: 'already_exists', booking_number: booking.booking_number };
-}
 
   const { error } = await supabase.from('bookings').insert({
     tour_id: tour.id,
