@@ -3,6 +3,8 @@
  * Pre-filters by sender domain before calling Claude to save tokens.
  */
 
+import crypto from 'crypto';
+
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 // Only call Claude for emails from these known sender addresses/domains
@@ -18,6 +20,9 @@ const PROVIDER_PATTERNS = [
   { pattern: /meine-landausfluege\.de$/i,            provider: 'meine-landausfluege' },
   { pattern: /tripup\.com$/i,                        provider: 'meine-landausfluege' },
 ];
+
+// Our own website's booking notification sender (fixed address, no booking number in body)
+const WEBSITE_SENDER = 'krumina.guna@apollo.lv';
 
 // Civitatis support/help emails — not booking notifications, skip these
 const SKIP_SENDERS = [
@@ -37,8 +42,10 @@ Viator: get time from "Tour Grade" (e.g. "English Tour 10:30"→10:30) or "Tour 
 Date: YYYY-MM-DD, assume 2026 if no year
 Time: HH:MM 24h
 Action: confirmed|cancelled|rejected|amended|manual_required|unknown
-Provider: freetour|viator|civitatis|guruwalk|meine-landausfluege|unknown
+Provider: freetour|viator|civitatis|guruwalk|meine-landausfluege|rigatrips-website|unknown
 meine-landausfluege/TripUp emails → action=manual_required
+
+- rigatrips-website emails (from our own site) have format: "From: [Name]Message: ...Number of Tickets: N...Departure Date: [Month] [Day], [Year] [HH:MM]h". Extract name from "From:", people count from "Number of Tickets:", date+time from "Departure Date:". The "Message:" field is a casual customer note — ignore any mentions of other people/friends in it, it does NOT mean multiple bookings. There is no booking number, no email, no phone for these — leave bn, e, ph as null. action=confirmed always for these unless message explicitly says cancel. tour_internal_code should be the tour name mentioned (e.g. "Free Walking Tour Riga OLD Town").
 
 - Freetour IMPORTANT: "Rechazar esta reserva", "Reject this booking", and "reject this booking in order to inform the customer" are ACTION BUTTONS/LINKS for the operator — they do NOT mean the booking is rejected. Only set action=rejected if the email explicitly states the booking WAS ALREADY rejected (e.g. "You have successfully rejected the booking"). Both "Reserva Garantizada Confirmada" (Spanish) and "Confirmed Guaranteed Booking" (English) mean action=confirmed.
 - Freetour CANCELLATION: "Your customer: [Name] has cancelled his or her booking (#[number])" or "ha cancelado su reserva" means action=cancelled. This is a genuine customer-initiated cancellation, distinct from a rejection.
@@ -125,9 +132,13 @@ function expandResponse(compact) {
 }
 
 export async function parseEmail(subject, text, fromEmail) {
-  // Pre-filter: only process emails from known booking providers
+  const isWebsiteBooking = fromEmail?.toLowerCase() === WEBSITE_SENDER;
+
+  // Pre-filter: only process emails from known booking providers (or our own website)
   const domain = fromEmail?.split('@')[1]?.toLowerCase();
-  const provider = PROVIDER_PATTERNS.find(({ pattern }) => pattern.test(domain || ''))?.provider;
+  const provider = isWebsiteBooking
+    ? 'rigatrips-website'
+    : PROVIDER_PATTERNS.find(({ pattern }) => pattern.test(domain || ''))?.provider;
 
   if (!provider) return null; // silently skip unknown senders
 
@@ -181,6 +192,15 @@ export async function parseEmail(subject, text, fromEmail) {
     const parsed = expandResponse(compact);
 
     if (parsed.action === 'unknown') return null;
+
+    // Website bookings have no real booking number — generate a deterministic one
+    // from the identifying fields so reprocessing the same email never duplicates it.
+    if (isWebsiteBooking && !parsed.booking_number) {
+      const key = `${parsed.name}|${parsed.date}|${parsed.time}|${parsed.tour_internal_code}`.toLowerCase();
+      const hash = crypto.createHash('sha1').update(key).digest('hex').slice(0, 10);
+      parsed.booking_number = `WEB-${hash}`;
+    }
+
     return parsed;
 
   } catch (err) {
