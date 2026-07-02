@@ -75,6 +75,22 @@ ALTER TABLE bookings ADD COLUMN IF NOT EXISTS kids int DEFAULT 0;
 UPDATE bookings SET adults = people WHERE adults = 0 AND youth = 0 AND kids = 0 AND people > 0;
 ```
 
+Run this SQL to track when a booking was last amended and when it was
+cancelled/rejected. `modified_at` only ever holds the latest amendment
+(not a full history). Also adds the admin UPDATE policy the tour_app
+booking-search page needs to amend dates / cancel bookings — previously
+admins only had SELECT access.
+
+```sql
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS modified_at timestamptz;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS cancelled_at timestamptz;
+
+CREATE POLICY "admins manage bookings" ON bookings
+  FOR ALL TO authenticated
+  USING (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND admin = true))
+  WITH CHECK (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND admin = true));
+```
+
 ## Deployment options
 
 ### Option A: cPanel cron job
@@ -108,3 +124,12 @@ The parser matches incoming bookings to `tour_templates` rows using this priorit
 3. Time only (fallback)
 
 Make sure your `tour_templates` rows have `time` in `HH:MM` 24h format and `language` values that match what the providers send (e.g. `Spanish`, `Español`, `English`).
+
+**Pitfall:** the time-only fallback (priority 3) means a new tour type sharing
+a time slot with an existing template will silently get matched to the
+*wrong* tour. E.g. adding a new "Riga Old Town 15:00" tour with no matching
+template at 15:00 caused those bookings to land on whichever unrelated
+15:00 tour matched the booking's language (KGB 15:00 English, Art Nouveau
+15:00 Spanish) — nothing errors, so this can go unnoticed for a while.
+Whenever a new time slot is introduced, add its `tour_templates` row(s)
+*before* bookings for it start arriving.

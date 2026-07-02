@@ -124,7 +124,7 @@ export async function syncBooking(booking) {
     // Update booking with new date and new tour_id
     await supabase
       .from('bookings')
-      .update({ date: booking.date, tour_id: newTour.id })
+      .update({ date: booking.date, tour_id: newTour.id, modified_at: new Date().toISOString() })
       .eq('id', existing[0].id);
 
     return { action: 'amended', booking_number: booking.booking_number, new_tour_id: newTour.id };
@@ -149,7 +149,7 @@ export async function syncBooking(booking) {
 
     await supabase
       .from('bookings')
-      .update({ status: booking.action })
+      .update({ status: booking.action, cancelled_at: new Date().toISOString() })
       .eq('id', existing[0].id);
 
     return { action: booking.action, booking_number: booking.booking_number };
