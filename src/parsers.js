@@ -47,8 +47,9 @@ Phone: always look for "Phone:", "Teléfono de reserva:", "Booking phone:" label
 Action: confirmed|cancelled|rejected|amended|manual_required|unknown
 Provider: freetour|viator|civitatis|guruwalk|meine-landausfluege|rigatrips-website|buendia|getyourguide|unknown
 meine-landausfluege/TripUp emails → action=manual_required
+Internal code (ic) — set this whenever the tour name is identifiable, ANY provider, even if not fully sure: "Riga Old Town Free Tour" (Old Town/Riga Old Town/Free Tour Riga walking tour), "Riga Old Town Walking Tour" (same but explicitly paid/non-free), "Latvian Food Tour" (Food Tour/Food Tasting Tour), "KGB Soviet Tour" (Communist Riga/Soviet/KGB), "Art Nouveau Tour" (Art Nouveau). This especially matters at 15:00, where three of these share a language with each other. Leave ic null only if the tour name can't be determined at all.
 
-- rigatrips-website emails (from our own site) have format: "From: [Name]Message: ...Number of Tickets: N...Departure Date: [Month] [Day], [Year] [optional HH:MMh]". Extract name from "From:", people count from "Number of Tickets:", date+time from "Departure Date:". The "Message:" field is a casual customer note — ignore any mentions of other people/friends in it, it does NOT mean multiple bookings. There is no booking number, no email, no phone for these — leave bn, e, ph as null. action=confirmed always for these unless message explicitly says cancel. Time after the date is OPTIONAL — many of these emails genuinely have no time at all (just "Departure Date: September 19, 2025" with nothing after). If there is no HH:MMh after the date, set time=null honestly, do not guess or invent one. Map the tour name in the email to exactly one of these internal_code values, regardless of capitalization or wording variations: "Riga Old Town Free Tour" (any "Old Town"/"Riga Old Town" walking tour mention), "Latvian Food Tour" (any "Food Tour"/"Food Tasting Tour" mention), "KGB Soviet Tour" (any "Communist Riga"/"Soviet"/"KGB" mention), "Riga Old Town Walking Tour" (only if explicitly a paid/non-free walking tour). Language defaults to English unless another language is explicitly stated. Ignore any booking mentioning "Clone Testing" or "test" tours — set action=unknown for those.
+- rigatrips-website emails (from our own site) have format: "From: [Name]Message: ...Number of Tickets: N...Departure Date: [Month] [Day], [Year] [optional HH:MMh]". Extract name from "From:", people count from "Number of Tickets:", date+time from "Departure Date:". The "Message:" field is a casual customer note — ignore any mentions of other people/friends in it, it does NOT mean multiple bookings. There is no booking number, no email, no phone for these — leave bn, e, ph as null. action=confirmed always for these unless message explicitly says cancel. Time after the date is OPTIONAL — many of these emails genuinely have no time at all (just "Departure Date: September 19, 2025" with nothing after). If there is no HH:MMh after the date, set time=null honestly, do not guess or invent one. Use the internal_code mapping above. Language defaults to English unless another language is explicitly stated. Ignore any booking mentioning "Clone Testing" or "test" tours — set action=unknown for those.
 
 - Freetour IMPORTANT: "Rechazar esta reserva", "Reject this booking", and "reject this booking in order to inform the customer" are ACTION BUTTONS/LINKS for the operator — they do NOT mean the booking is rejected. Only set action=rejected if the email explicitly states the booking WAS ALREADY rejected (e.g. "You have successfully rejected the booking"). Both "Reserva Garantizada Confirmada" (Spanish) and "Confirmed Guaranteed Booking" (English) mean action=confirmed.
 - Freetour CANCELLATION: "Your customer: [Name] has cancelled his or her booking (#[number])" or "ha cancelado su reserva" means action=cancelled. This is a genuine customer-initiated cancellation, distinct from a rejection.
@@ -190,7 +191,11 @@ export async function parseEmail(subject, text, fromEmail) {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 150,
-        system: SYSTEM_PROMPT,
+        // Cached: the system prompt is identical on every call, so mark it
+        // as a cache breakpoint — subsequent calls within the cache window
+        // (the parser polls every few minutes, well within it) pay ~10% of
+        // the normal input-token price for this block instead of full price.
+        system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
         messages: [{ role: 'user', content: emailContent }],
       }),
     });

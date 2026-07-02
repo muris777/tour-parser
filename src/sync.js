@@ -170,6 +170,18 @@ export async function syncBooking(booking) {
     };
   }
 
+  // Riga Old Town 15:00 only runs July–August — flag anything outside that,
+  // since it likely means the booking landed on the wrong template.
+  if (template.internal_code === 'Riga Old Town Free Tour' && template.time === '15:00') {
+    const month = booking.date?.slice(5, 7);
+    if (month && month !== '07' && month !== '08') {
+      console.warn(
+        `⚠️  SEASON CHECK [Riga Old Town 15:00] booking ${booking.booking_number} is dated ${booking.date} — ` +
+        `this tour only runs July–August, please verify`
+      );
+    }
+  }
+
   const tour = await findOrCreateTour(template.id, booking.date);
 
   const { data: existing } = await supabase

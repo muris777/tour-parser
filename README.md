@@ -133,3 +133,27 @@ template at 15:00 caused those bookings to land on whichever unrelated
 15:00 Spanish) — nothing errors, so this can go unnoticed for a while.
 Whenever a new time slot is introduced, add its `tour_templates` row(s)
 *before* bookings for it start arriving.
+
+Adding the Riga Old Town 15:00 template also created a *new* ambiguity: KGB
+(15:00 English) and Art Nouveau (15:00 Spanish) now share their time+language
+with Riga Old Town, so priority 2 alone can no longer tell them apart —
+whichever row Postgres returns first wins. The system prompt now tells
+Claude to always set `internal_code` for these three tours specifically
+(any provider, not just Civitatis/website) so priority 1 resolves it
+correctly. If you add another tour sharing an existing time+language pair,
+you'll need the same treatment.
+
+Riga Old Town 15:00 is seasonal (July–August only) — `sync.js` logs a
+`SEASON CHECK` warning (not a hard block) if a booking lands on that
+template outside those months, since that usually means it was mismatched
+rather than a real off-season booking.
+
+## API cost
+
+The system prompt is sent as a cache breakpoint (`cache_control: ephemeral`)
+since it's identical on every call — repeated calls within the cache window
+(a few minutes; the parser polls every `POLL_INTERVAL_MS`, well inside it)
+pay roughly 10% of the normal input price for it instead of full price.
+When editing `SYSTEM_PROMPT`, prefer adding a rule once in a general
+location over repeating it per-provider — duplicated wording costs tokens
+on every single call, cached or not.
