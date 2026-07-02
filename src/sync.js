@@ -198,6 +198,9 @@ export async function syncBooking(booking) {
     email: booking.email,
     phone_number: booking.phone_number,
     people: booking.people,
+    adults: booking.adults,
+    youth: booking.youth,
+    kids: booking.kids,
     date: booking.date,
     status: 'confirmed',
   });

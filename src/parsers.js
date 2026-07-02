@@ -52,10 +52,10 @@ meine-landausfluege/TripUp emails → action=manual_required
 - Freetour CANCELLATION: "Your customer: [Name] has cancelled his or her booking (#[number])" or "ha cancelado su reserva" means action=cancelled. This is a genuine customer-initiated cancellation, distinct from a rejection.
 - Viator cancellation emails have subject "Booking Canceled" and contain "Booking Reference: #BR-..." with "Canceled" below it — set action=cancelled for these, even if they come from a "noreply" address. 
 - Viator customer messages/conversations (subject starts with "Conversation with" or contains "wrote:") are NOT booking actions — set action=unknown and all other fields null. Do not quote or include any customer message text in your JSON response.
-- Total people (ppl field) = sum of ALL traveler categories mentioned (adults + children + infants + seniors, etc.), not just the first category listed. Look for labels like "Adultos", "Niños", "Adults", "Children", "Kids", "Infants" and add them all together.
+- Traveler counts are split into three buckets: ad=adults, yo=youth, ki=kids. Look for labels like "Adultos"/"Adults"/"Seniors" → ad. "Niños"/"Children"/"Kids"/"Infants"/"Bebés" → ki (infants always count as kids, never their own bucket). "Youth"/"Teens"/"Jóvenes" (an explicit youth/teen category, distinct from children) → yo — this is rare, most emails never send it. If the email gives one single traveler count with no age breakdown at all, put the entire count in ad and leave yo=0, ki=0. Every category mentioned must be counted in exactly one bucket — never drop a category and never count it in more than one bucket.
 
-JSON: {"p":"provider","a":"action","bn":"booking_number","n":"name","e":"email","ph":"phone","ppl":0,"d":"date","t":"time","l":"language","ic":"internal_code"}
-IMPORTANT: use null for any missing/unknown field values, never use the string "unknown"`;
+JSON: {"p":"provider","a":"action","bn":"booking_number","n":"name","e":"email","ph":"phone","ad":0,"yo":0,"ki":0,"d":"date","t":"time","l":"language","ic":"internal_code"}
+IMPORTANT: use null for any missing/unknown field values, never use the string "unknown". ad/yo/ki must always be numbers (use 0, not null, for a bucket with no travelers).`;
 
 // Extract only booking-relevant lines from email body
 const KEEP_PATTERNS = [
@@ -126,6 +126,9 @@ function extractRelevantLines(text) {
 
 // Expand compact JSON field names back to full names
 function expandResponse(compact) {
+  const adults = compact.ad ?? 0;
+  const youth = compact.yo ?? 0;
+  const kids = compact.ki ?? 0;
   return {
     provider:          compact.p  ?? 'unknown',
     action:            compact.a  ?? 'unknown',
@@ -133,7 +136,10 @@ function expandResponse(compact) {
     name:              compact.n  ?? null,
     email:             compact.e  ?? null,
     phone_number:      compact.ph ?? null,
-    people:            compact.ppl ?? null,
+    adults,
+    youth,
+    kids,
+    people:            adults + youth + kids,
     date:              compact.d  ?? null,
     time:              compact.t  ?? null,
     language:          compact.l  ?? null,

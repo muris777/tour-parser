@@ -60,6 +60,21 @@ CREATE POLICY "authenticated can view checkins" ON checkins
   FOR SELECT TO authenticated USING (true);
 ```
 
+Run this SQL to split `bookings.people` into an adults/youth/kids breakdown
+(infants are counted as kids). `people` stays as the total — it's kept in
+sync by the parser and is still what the tour_app frontend reads for
+capacity counts — the new columns are additive.
+
+```sql
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS adults int DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS youth int DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS kids int DEFAULT 0;
+
+-- Backfill existing bookings: assume the full historical count was adults,
+-- since there's no way to recover the real historical split.
+UPDATE bookings SET adults = people WHERE adults = 0 AND youth = 0 AND kids = 0 AND people > 0;
+```
+
 ## Deployment options
 
 ### Option A: cPanel cron job
