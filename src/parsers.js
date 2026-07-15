@@ -190,7 +190,7 @@ export async function parseEmail(subject, text, fromEmail) {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 150,
+        max_tokens: 250,
         // Cached: the system prompt is identical on every call, so mark it
         // as a cache breakpoint — subsequent calls within the cache window
         // (the parser polls every few minutes, well within it) pay ~10% of
@@ -213,7 +213,7 @@ export async function parseEmail(subject, text, fromEmail) {
     try {
       compact = JSON.parse(clean);
     } catch (parseErr) {
-      console.warn(`⚠️  Skipping unparseable response for "${subject}"`);
+      console.warn(`⚠️  Skipping unparseable response for "${subject}" (stop_reason: ${data.stop_reason}): ${rawText}`);
       return null;
     }
     const parsed = expandResponse(compact);
