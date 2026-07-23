@@ -95,12 +95,17 @@ export async function syncBooking(booking) {
   }
 
   // Handle amendments — update date AND reassign to correct tour
+  // Matched on booking_number alone (not provider) — some operators send
+  // confirmations and amendments/cancellations from different domains that
+  // our own domain-based provider classification maps to different values
+  // (e.g. Buendia confirms from buendiatours.com but TuriTop sends their
+  // cancellation notices), so the provider on the follow-up email can
+  // legitimately differ from the provider stored on the original booking.
   if (booking.action === 'amended') {
     const { data: existing } = await supabase
       .from('bookings')
       .select('id, tour_id')
       .eq('booking_number', booking.booking_number)
-      .eq('provider', booking.provider)
       .limit(1);
 
     if (!existing?.length) {
@@ -135,7 +140,6 @@ export async function syncBooking(booking) {
       .from('bookings')
       .select('id, status')
       .eq('booking_number', booking.booking_number)
-      .eq('provider', booking.provider)
       .limit(1);
 
     if (!existing?.length) {

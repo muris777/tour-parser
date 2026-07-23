@@ -21,6 +21,7 @@ const PROVIDER_PATTERNS = [
   { pattern: /tripup\.com$/i,                        provider: 'meine-landausfluege' },
   { pattern: /buendiatours\.com$/i,                  provider: 'buendia' },
   { pattern: /getyourguide\.com$/i,                  provider: 'getyourguide' },
+  { pattern: /turitop\.com$/i,                       provider: 'turitop' },
 ];
 
 // Our own website's booking notification sender (fixed address, no booking number in body)
@@ -45,7 +46,7 @@ Date: YYYY-MM-DD, assume 2026 if no year
 Time: HH:MM 24h
 Phone: always look for "Phone:", "Teléfono de reserva:", "Booking phone:" labels and extract the FULL number including country code and all digits — never truncate to just a country code prefix like "+1" alone.
 Action: confirmed|cancelled|rejected|amended|manual_required|unknown
-Provider: freetour|viator|civitatis|guruwalk|meine-landausfluege|rigatrips-website|buendia|getyourguide|unknown
+Provider: freetour|viator|civitatis|guruwalk|meine-landausfluege|rigatrips-website|buendia|getyourguide|turitop|unknown
 meine-landausfluege/TripUp emails → action=manual_required
 Internal code (ic) — set this whenever the tour name is identifiable, ANY provider, even if not fully sure: "Riga Old Town Free Tour" (Old Town/Riga Old Town/Free Tour Riga walking tour), "Riga Old Town Walking Tour" (same but explicitly paid/non-free), "Latvian Food Tour" (Food Tour/Food Tasting Tour), "KGB Soviet Tour" (Communist Riga/Soviet/KGB), "Art Nouveau Tour" (Art Nouveau). This especially matters at 15:00, where three of these share a language with each other. Leave ic null only if the tour name can't be determined at all.
 
@@ -55,8 +56,9 @@ Internal code (ic) — set this whenever the tour name is identifiable, ANY prov
 - Freetour CANCELLATION: "Your customer: [Name] has cancelled his or her booking (#[number])" or "ha cancelado su reserva" means action=cancelled. This is a genuine customer-initiated cancellation, distinct from a rejection.
 - Viator cancellation emails have subject "Booking Canceled" and contain "Booking Reference: #BR-..." with "Canceled" below it — set action=cancelled for these, even if they come from a "noreply" address. 
 - Viator customer messages/conversations (subject starts with "Conversation with" or contains "wrote:") are NOT booking actions — set action=unknown and all other fields null. Do not quote or include any customer message text in your JSON response.
-- Buen Dia (buendiatours.com) emails are entirely in Spanish and have no explicit language field — default language to Spanish for these unless another language is explicitly stated elsewhere in the email. Booking number follows "Nº Reserva :". Date and time appear together on one line like "(Domingo) 5 Julio 2026 11:00" — the parenthesized weekday is not part of the date, parse the day/Spanish-month-name/year into YYYY-MM-DD and the trailing HH:MM as time separately. "Estado: no pagado" / "Estado: pagado" is a PAYMENT status, not a booking status — never treat "no pagado" as a cancellation; action=confirmed whenever the email says "Tu reserva está confirmada". Map any "Free Tour Riga"/"Riga Imprescindible" tour name to internal_code "Riga Old Town Free Tour".
+- Buen Dia (buendiatours.com) confirmation emails are entirely in Spanish and have no explicit language field — default language to Spanish for these unless another language is explicitly stated elsewhere in the email. Booking number follows "Nº Reserva :". Date and time appear together on one line like "(Domingo) 5 Julio 2026 11:00" — the parenthesized weekday is not part of the date, parse the day/Spanish-month-name/year into YYYY-MM-DD and the trailing HH:MM as time separately. "Estado: no pagado" / "Estado: pagado" is a PAYMENT status, not a booking status — never treat "no pagado" as a cancellation; action=confirmed whenever the email says "Tu reserva está confirmada". Map any "Free Tour Riga"/"Riga Imprescindible" tour name to internal_code "Riga Old Town Free Tour".
 - Get Your Guide (getyourguide.com) emails: no confirmed format seen yet — apply the general field rules above (booking/reservation number, date, time, language, traveler counts, name/email/phone) as best as the email's own labels allow.
+- TuriTop (turitop.com) CANCELLATION emails are mostly in English: they open with "This booking has just been cancelled", then the tour name, then date/time on one line like "(Thursday) 23 July 2026 11:00" (parenthesized weekday not part of the date), then the booking number after "Booking ID:", traveler counts in Spanish ("Adulto"/"Menor de 12 años" etc — parse with the same traveler-bucket rules as everything else), then "Customer contact details" (email/phone) and a "Reasons:" line with the customer's cancellation reason (ignore the reason text itself, it's not a field we store). Treat "This booking has just been cancelled" as action=cancelled and apply the internal_code mapping above to the tour name. No TuriTop confirmation-email format has been seen yet — apply the general field rules above for those.
 - Traveler counts are split into three buckets: ad=adults, yo=youth, ki=kids. Look for labels like "Adultos"/"Adults"/"Seniors" → ad. "Niños"/"Children"/"Kids"/"Infants"/"Bebés" → ki (infants always count as kids, never their own bucket). "Youth"/"Teens"/"Jóvenes" (an explicit youth/teen category, distinct from children) → yo — this is rare, most emails never send it. If the email gives one single traveler count with no age breakdown at all, put the entire count in ad and leave yo=0, ki=0. Every category mentioned must be counted in exactly one bucket — never drop a category and never count it in more than one bucket.
 
 JSON: {"p":"provider","a":"action","bn":"booking_number","n":"name","e":"email","ph":"phone","ad":0,"yo":0,"ki":0,"d":"date","t":"time","l":"language","ic":"internal_code"}
@@ -100,6 +102,7 @@ const PROVIDER_EMAILS = [
   /freetour\.com/i,
   /buendiatours\.com/i,
   /getyourguide\.com/i,
+  /turitop\.com/i,
   /privaterelay\.appleid\.com/i,
 ];
 
