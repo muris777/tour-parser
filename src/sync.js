@@ -61,6 +61,24 @@ async function findTemplate(booking) {
   return null;
 }
 
+// Every silent skip below used to just vanish — the email that produced it
+// is already marked \Seen in IMAP by the time syncBooking runs, so it will
+// never be retried. Persist skips so they're at least visible for manual
+// follow-up instead of only existing as a console.warn line in server logs.
+async function logIssue(reason, booking, extra = {}) {
+  try {
+    await supabase.from('parser_issues').insert({
+      reason,
+      provider: booking?.provider ?? null,
+      booking_number: booking?.booking_number ?? null,
+      action: booking?.action ?? null,
+      raw: { ...booking, ...extra },
+    });
+  } catch (err) {
+    console.error(`[sync] Failed to log parser issue "${reason}": ${err.message}`);
+  }
+}
+
 async function findOrCreateTour(templateId, date) {
   const { data: existing } = await supabase
     .from('tours')
@@ -98,6 +116,7 @@ export async function syncBooking(booking) {
   }
 
   if (!booking.booking_number || !booking.date) {
+    await logIssue('missing booking_number or date', booking);
     return { skipped: true, reason: 'missing booking_number or date' };
   }
 
@@ -116,6 +135,7 @@ export async function syncBooking(booking) {
       .limit(1);
 
     if (!existing?.length) {
+      await logIssue('amendment for unknown booking', booking);
       return { skipped: true, reason: 'amendment for unknown booking' };
     }
 
@@ -127,6 +147,7 @@ export async function syncBooking(booking) {
       .single();
 
     if (!currentTour) {
+      await logIssue('amendment — current tour not found', booking);
       return { skipped: true, reason: 'amendment — current tour not found' };
     }
 
@@ -161,6 +182,7 @@ export async function syncBooking(booking) {
       .limit(1);
 
     if (!existing?.length) {
+      await logIssue('cancellation for unknown booking', booking);
       return { skipped: true, reason: 'cancellation for unknown booking' };
     }
 
@@ -183,6 +205,7 @@ export async function syncBooking(booking) {
       `[sync] No template found for booking ${booking.booking_number} — ` +
       `time: ${booking.time}, lang: ${booking.language}, code: ${booking.tour_internal_code}`
     );
+    await logIssue('no matching template', booking);
     return {
       skipped: true,
       reason: 'no matching template',

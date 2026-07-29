@@ -91,6 +91,34 @@ CREATE POLICY "admins manage bookings" ON bookings
   WITH CHECK (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND admin = true));
 ```
 
+Run this SQL to create the `parser_issues` table. Emails are marked `\Seen`
+in IMAP as soon as they're fetched, before parsing/syncing even runs — so
+if `syncBooking` has to skip an email (no matching booking, no matching
+template, etc.), that email is gone for good and will never be retried.
+This table is where those skips get persisted so they're visible for
+manual follow-up instead of only existing as a `console.warn` line in
+server logs.
+
+```sql
+CREATE TABLE IF NOT EXISTS parser_issues (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at timestamptz DEFAULT now(),
+  reason text NOT NULL,
+  provider text,
+  booking_number text,
+  action text,
+  raw jsonb,
+  resolved boolean DEFAULT false
+);
+
+ALTER TABLE parser_issues ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "admins manage parser issues" ON parser_issues
+  FOR ALL TO authenticated
+  USING (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND admin = true))
+  WITH CHECK (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND admin = true));
+```
+
 ## Deployment options
 
 ### Option A: cPanel cron job
