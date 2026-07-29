@@ -90,6 +90,13 @@ export async function syncBooking(booking) {
     booking.action = 'amended';
   }
 
+  // Viator/Tripadvisor amendment emails give the bare booking reference with
+  // no "BR-" prefix, but confirmations/cancellations do include it and it's
+  // what's stored — normalize so lookups by booking_number actually match.
+  if (booking.provider === 'viator' && booking.booking_number && !booking.booking_number.startsWith('BR-')) {
+    booking.booking_number = `BR-${booking.booking_number}`;
+  }
+
   if (!booking.booking_number || !booking.date) {
     return { skipped: true, reason: 'missing booking_number or date' };
   }
