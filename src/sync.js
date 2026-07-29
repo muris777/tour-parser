@@ -123,8 +123,19 @@ export async function syncBooking(booking) {
       return { skipped: true, reason: 'amendment — current tour not found' };
     }
 
-    // Find or create a tour on the new date with the same template
-    const newTour = await findOrCreateTour(currentTour.template_id, booking.date);
+    // Amendments can change the time (not just the date) — e.g. Civitatis
+    // modification emails. Re-resolve the template from the parsed time/
+    // language/internal_code when available, and only fall back to the
+    // booking's existing template if the amendment email had no time or
+    // matched no template.
+    let templateId = currentTour.template_id;
+    if (booking.time) {
+      const newTemplate = await findTemplate(booking);
+      if (newTemplate) templateId = newTemplate.id;
+    }
+
+    // Find or create a tour on the new date with the resolved template
+    const newTour = await findOrCreateTour(templateId, booking.date);
 
     // Update booking with new date and new tour_id
     await supabase
