@@ -40,7 +40,7 @@ const SKIP_SENDERS = [
 // Compact system prompt — shorter = fewer input tokens per call
 const SYSTEM_PROMPT = `Parse booking emails for a Riga tour company. Return ONLY JSON, no text.
 
-Language: always English (Español→Spanish, Français→French, Deutsch→German, Italiano→Italian, Inglese→English)
+Language: read the language stated in the email and output its English name — translate, never default to English (Español→Spanish, Français→French, Deutsch→German, Italiano→Italian, Inglese→English)
 Viator: get time from "Tour Grade" (e.g. "English Tour 10:30"→10:30) or "Tour Grade Code" (e.g. "TG1~10:30"→10:30); language from "Tour Grade Description" or "Tour Language"
 Date: YYYY-MM-DD, assume 2026 if no year
 Time: HH:MM 24h
